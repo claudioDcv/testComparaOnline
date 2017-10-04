@@ -26,13 +26,18 @@ class Log {
       });
     }
   }
+  dateConverter(d) {
+    return [d.getMonth()+1, d.getDate(), d.getFullYear()].join('/')+' '+ [d.getHours(), d.getMinutes(), d.getSeconds()].join(':');
+  }
   showMsg(msg) {
-    console.log(`${msg.level}\t${msg.date}\t${msg.msg}`);
+    console.log(`-> ${msg.level}\t${this.dateConverter(new Date(msg.date))}\n   ${msg.msg}\n`);
     return msg;
   }
   showList() {
     this.list.forEach(msg => { this.showMsg(msg); });
-    console.log('show log.txt!!!');
+    if (process.argv[3] == 'logfile') {
+      console.log('show log.txt!!!');
+    }
   }
 }
 
@@ -57,7 +62,14 @@ class Login {
     this.sessions = [];
     this.users = [];
     this.passwords = [];
-    this.usersInit(hash);
+    this.init(hash);
+  }
+  /**
+    * Add new logged message.
+    * @param {string} msg - text to message.
+    */
+  logged(msg) {
+    this.log.add(Log.levels().WARN, msg);
   }
   /**
     * Add new user.
@@ -68,10 +80,10 @@ class Login {
     this.passwords.push(userData.password);
   }
   /**
-    * Init array passwords and users.
+    * init array passwords and users.
     * @param {object} hash - object: k: username, v: password.
     */
-  usersInit(hash) {
+  init(hash) {
     Object.keys(hash).forEach(user => {
       this.addUser({ user, password: hash[user] });
     });
@@ -79,7 +91,7 @@ class Login {
   // Register user
   registerUser(user, password) {
     if (Login.userExist(user, this.users)) {
-      this.log.add(Log.levels().WARN, `registerUser(${user}, ${password}) [user already exists]`);
+      this.logged(`registerUser(${user}, ${password}) [user already exists]`);
     } else {
       this.addUser({ user, password });
     }
@@ -87,60 +99,55 @@ class Login {
 
   logout(user) {
     if (Login.userExist(user, this.sessions)) {
-      this.sessions = this.sessions.filter(userSession => userSession !== user);
+      const index = this.idx(user, this.sessions);
+      this.sessions.splice(index, 1);
     } else {
-      this.log.add(Log.levels().WARN, `logout(${user}) [user not exists]`);
+      this.logged(`logout(${user}) [user not exists]`);
     }
   }
 
   removeUser(user) {
     if (Login.userExist(user, this.users)) {
-      this.users = this.users.filter((userRegister, i) => {
-        if (userRegister === user) this.passwords.splice(i, 1);
-        return userRegister !== user;
-      });
+      const index = this.userIndex(user);
+      this.users.splice(index, 1);
+      this.passwords.splice(index, 1);
     } else {
-      this.log.add(Log.levels().WARN, `removeUser(${user}) [user not exists]`);
+      this.logged(`removeUser(${user}) [user not exists]`);
     }
   }
 
   checkPassword(user, password) {
-    let passwordCorrect = false;
     if (Login.userExist(user, this.users)) {
-      this.users.forEach((userRegister, i) => {
-          if (userRegister === user && this.passwords[i] === password) {
-            passwordCorrect = true;
-          }
-      });
-    } else {
-      this.log.add(Log.levels().WARN, `checkPassword(${user}, ${password}) [user not exists]`);
+      const index = this.userIndex(user);
+      return this.passwords[index] === password && this.users[index] === user;
     }
-    if (!passwordCorrect) {
-      this.log.add(Log.levels().WARN, `checkPassword(${user}, ${password}) [password is not correct]`);
-    }
-    return passwordCorrect;
+    this.logged(`checkPassword(${user}, ${password}) [user not exists]`);
+    return false;
   }
 
   login(user, password) {
     if (this.checkPassword(user, password)) {
-      if (Login.userExist(user, this.sessions)) {
-        this.log.add(Log.levels().WARN, `login(${user}, ${password}) [user is login]`);
-      } else {
+      if (!Login.userExist(user, this.sessions)) {
         this.sessions.push(user);
+      } else {
+        this.logged(`login(${user}, ${password}) [user is login]`);
       }
     } else {
-      this.log.add(Log.levels().WARN, `login(${user}, ${password}) [user invaid credentials]`);
+      this.logged(`login(${user}, ${password}) [invaid credentials]`);
     }
   }
 
   updatePassword(user, oldPassword, newPassword) {
-    if (this.checkPassword(user, oldPassword)) {
-      this.passwords[this.idx(user, this.users)] = newPassword;
+    if (this.checkPassword(user, oldPassword) && newPassword) {
+      this.passwords[this.userIndex(user)] = newPassword;
       return true;
     }
     return false;
   }
 
+  userIndex(user) {
+    return this.idx(user, this.users);
+  }
 
   // Gets index of an element in an array
   idx(element, array) {
@@ -188,7 +195,7 @@ const test = () => {
   login.login('user1', 'pass1');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n5. ------ Login (user3)  ------');
+  console.log('\n\n5. ------ Login (user3, pass5)  ------');
   console.log('sessi:\t', login.sessions);
   console.log('session (user3) init...');
   login.login('user3', 'pass5');
@@ -198,49 +205,49 @@ const test = () => {
   login.login('user1', 'pass1');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n6. ------ Login (user199, pass1) [simulate error] ------');
+  console.log('\n\n7. ------ Login (user199, pass1) [simulate error] ------');
   login.login('user199', 'pass1');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n6. ------ Login (user1, pass199) [simulate error] ------');
+  console.log('\n\n8. ------ Login (user1, pass199) [simulate error] ------');
   login.login('user1', 'pass199');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n7. ------ Logout (user1)  ------');
+  console.log('\n\n9. ------ Logout (user1)  ------');
   login.logout('user1');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n8. ------ Logout (user1) [simulate error] ------');
+  console.log('\n\n10. ------ Logout (user1) [simulate error] ------');
   login.logout('user1');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n9. ------ Remove (user100) [simulate error] ------');
+  console.log('\n\n11. ------ Remove (user100) [simulate error] ------');
   login.removeUser('user100');
   console.log('users:\t', login.users);
   console.log('passw:\t', login.passwords);
 
-  console.log('\n\n10. ------ Remove (user3) ------');
+  console.log('\n\n12. ------ Remove (user3) ------');
   login.removeUser('user3');
   console.log('users:\t', login.users);
   console.log('passw:\t', login.passwords);
 
-  console.log('\n\n11. ------ Checks Password (user1, pass1) ------');
+  console.log('\n\n13. ------ Checks Password (user1, pass1) ------');
   console.log('->\t', login.checkPassword('user1', 'pass1'));
 
-  console.log('\n\n12. ------ Checks Password (user1, pass100)  [simulate error] ------');
+  console.log('\n\n14. ------ Checks Password (user1, pass100)  [simulate error] ------');
   console.log('->\t', login.checkPassword('user1', 'pass100'));
 
-  console.log('\n\n13. ------ Change Password (user1, pass1 -> pass33) ------');
+  console.log('\n\n15. ------ Change Password (user1, pass1 -> pass33) ------');
   login.updatePassword('user1', 'pass1', 'pass33');
   console.log('users:\t', login.users);
   console.log('passw:\t', login.passwords);
 
-  console.log('\n\n14. ------ Login (user1, pass33) ------');
+  console.log('\n\n16. ------ Login (user1, pass33) ------');
   console.log('sessi:\t', login.sessions);
   login.login('user1', 'pass33');
   console.log('sessi:\t', login.sessions);
 
-  console.log('\n\n15. ---- LOG ----');
+  console.log('\n\n17. ---- LOG ----');
   login.log.showList();
 };
 
