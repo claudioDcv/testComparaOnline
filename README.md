@@ -1,10 +1,10 @@
-# Test Compara Online
+# Test Compara Online
 
-## requirement
+## requirement
 
 - Node v6.10.2
 
-## instructions
+## instructions
 
 - exec normal `node test.js`
 - exec test `node test.js test`
